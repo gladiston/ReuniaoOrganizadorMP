@@ -1,12 +1,34 @@
 unit fprincipal;
 
-{$mode objfpc}{$H+}
+//{$mode objfpc}{$H+}
+{$MODE Delphi}
 
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, ActnList, Menus,
-  ExtCtrls, ComCtrls, Buttons, StdCtrls, Types;
+  {$IFDEF DELPHI16_UP}
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
+  System.UITypes,
+  {$ELSE}
+  LCLIntf, LCLType, LMessages, Messages, SysUtils, Variants, Classes, Graphics,
+  Controls, Forms, Dialogs, ExtCtrls, Menus, ActnList, Buttons, ComCtrls,
+  {$ENDIF}
+  uCEFChromium, uCEFWindowParent, uCEFInterfaces, uCEFTypes, uCEFConstants,
+  uCEFWinControl, uCEFSentinel;
+
+
+  //{$IFDEF DELPHI16_UP}
+  //Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  //Vcl.Controls, Vcl.Forms, Vcl.Dialogs,
+  //System.UITypes,
+  //{$ELSE}
+  //LCLIntf, LCLType, LMessages, Messages, SysUtils, Variants, Classes, Graphics,
+  //Controls, Forms, Dialogs, ExtCtrls, ActnList, Menus, ComCtrls,
+  //Buttons, StdCtrls, Types,
+  //{$ENDIF}
+  //uCEFChromium, uCEFWindowParent, uCEFInterfaces, uCEFTypes, uCEFConstants,
+  //uCEFWinControl, uCEFSentinel, uCEFChromiumEvents;
 
 
 type
@@ -38,6 +60,8 @@ type
     ActionList1: TActionList;
     Alterarlegendadaimagem1: TMenuItem;
     BtnAcao_Inicio: TSpeedButton;
+    CEFWindowParent1: TCEFWindowParent;
+    Chromium1: TChromium;
     Copiaralocalizaoparaareadeclipboard1: TMenuItem;
     Figura: TImage;
     ImageList1: TImageList;
@@ -50,12 +74,10 @@ type
     Painel_Retratil: TPanel;
     Panel1: TPanel;
     Removeroelementoselecionado1: TMenuItem;
-    BtnFileName_PDF: TSpeedButton;
-    BtnFileName_Video: TSpeedButton;
     StatusBar1: TStatusBar;
     TabFigura: TTabSheet;
-    TabPDF: TTabSheet;
-    TabVideo: TTabSheet;
+    TabMedia: TTabSheet;
+    Timer1: TTimer;
     TrayIcon1: TTrayIcon;
     procedure Acao_AbrirExecute(Sender: TObject);
     procedure Acao_AdicionarExecute(Sender: TObject);
@@ -73,7 +95,23 @@ type
     procedure Acao_RemoverExecute(Sender: TObject);
     procedure Acao_SalvarExecute(Sender: TObject);
     procedure Acao_FonteMaiorExecute(Sender: TObject);
-    procedure BtnOpenMedia(Sender: TObject);
+    procedure Chromium1AfterCreated(Sender: TObject; const browser: ICefBrowser
+      );
+    procedure Chromium1BeforeClose(Sender: TObject; const browser: ICefBrowser);
+    procedure Chromium1BeforePopup(Sender: TObject; const browser: ICefBrowser;
+      const frame: ICefFrame; const targetUrl, targetFrameName: ustring;
+      targetDisposition: TCefWindowOpenDisposition; userGesture: Boolean;
+      const popupFeatures: TCefPopupFeatures; var windowInfo: TCefWindowInfo;
+      var client: ICefClient; var settings: TCefBrowserSettings;
+      var extra_info: ICefDictionaryValue; var noJavascriptAccess: Boolean;
+      var Result: Boolean);
+    procedure Chromium1Close(Sender: TObject; const browser: ICefBrowser;
+      var aAction: TCefCloseBrowserAction);
+    procedure Chromium1KeyEvent(Sender: TObject; const browser: ICefBrowser;
+      const event: PCefKeyEvent; osEvent: TCefEventHandle; out Result: Boolean);
+    procedure Chromium1PreKeyEvent(Sender: TObject; const browser: ICefBrowser;
+      const event: PCefKeyEvent; osEvent: TCefEventHandle; out
+      isKeyboardShortcut: Boolean; out Result: Boolean);
     procedure FormCloseQuery(Sender: TObject; var CanClose: boolean);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
@@ -88,6 +126,7 @@ type
       Shift: TShiftState; X, Y: Integer);
     procedure ListaSelectItem(Sender: TObject; Item: TListItem;
       Selected: Boolean);
+    procedure Timer1Timer(Sender: TObject);
   private
     FConfigFile: String;
     FIsPainel_Retratil_Opened: Boolean;
@@ -103,6 +142,19 @@ type
     procedure SetIsPainel_Retratil_Opened(AValue: Boolean);
     procedure SetListaFileName(AValue: String);
     procedure SetStatusMsg(AValue: String);
+  protected
+    // Variables to control when can we destroy the form safely
+    FCanClose : boolean;  // Set to True in TChromium.OnBeforeClose
+    FClosing  : boolean;  // Set to True in the CloseQuery event.
+    procedure WMMove(var aMessage : TWMMove); message WM_MOVE;
+    procedure WMMoving(var aMessage : TMessage); message WM_MOVING;
+    procedure WMEnterMenuLoop(var aMessage: TMessage); message WM_ENTERMENULOOP;
+    procedure WMExitMenuLoop(var aMessage: TMessage); message WM_EXITMENULOOP;
+    procedure BrowserCreatedMsg(var aMessage : TMessage); message CEF_AFTERCREATED;
+    procedure BrowserDestroyMsg(var aMessage : TMessage); message CEF_DESTROY;
+
+    procedure HandleKeyUp(const aMsg : TMsg; var aHandled : boolean);
+    procedure HandleKeyDown(const aMsg : TMsg; var aHandled : boolean);
   public
   published
     property ListaFileName:String read FListaFileName write SetListaFileName;
@@ -126,7 +178,6 @@ type
     function IsFileAcceptable(AArquivo:String):Boolean;
     function PlayAsImage(AArquivo:String):String;
     function PlayAsHTML(AArquivo:String=''):String;
-    function PlayAsPDF(AArquivo:String=''):String;
     function StopVideo: String;
     function IsImage(AArquivo:String):Boolean;
     function IsVideo(AArquivo:String):Boolean;
@@ -153,6 +204,7 @@ var
     ADlgType: TMsgDlgType;
     AButtons: TMsgDlgButtons;
     ACod_Ajuda: Integer=0) : TModalResult;      }
+procedure CreateGlobalCEFApp;
 
 implementation
 uses
@@ -160,7 +212,8 @@ uses
   uriparser,
   ClipBrd,
   Process,
-  LclIntf,
+  //LclIntf,
+  uCEFApplication,
   StrUtils;
 
 
@@ -202,6 +255,13 @@ begin
      End;
 end;
 }
+
+procedure CreateGlobalCEFApp;
+begin
+  GlobalCEFApp                     := TCefApplication.Create;
+  //GlobalCEFApp.LogFile          := 'cef.log';
+  //GlobalCEFApp.LogSeverity      := LOGSEVERITY_VERBOSE;
+end;
 
 { TfmPrincipal }
 
@@ -251,6 +311,10 @@ begin
   FLegendas:=TStringList.Create;
   FJanela_MaxHeight:=480;
   FJanela_MaxWidth:=640;
+
+  FCanClose := False;
+  FClosing  := False;
+
   sParamFileName:=ParamStr(1);
   ReadConfig;
   //for i := 0 to Pred(Paginas.PageCount) do
@@ -271,13 +335,20 @@ begin
   IsPainel_Retratil_Opened:=true;
   Constraints.MinHeight:=_Min_Height;
   Constraints.MinWidth:=_Min_Width;
-  BtnFileName_Video.Visible:=false;
-  BtnFileName_PDF.Visible:=false;
+
   Painel_Retratil.Width:=Lista.Canvas.TextWidth('____'+_Recolher+'____')+22;
+
   //BlackTheme;
 end;
 
+procedure TfmPrincipal.FormShow(Sender: TObject);
+begin
+  Painel_Retratil_AutoWidth(true);
+  // GlobalCEFApp.GlobalContextInitialized has to be TRUE before creating any browser
+  // If it's not initialized yet, we use a simple timer to create the browser later.
+  if not(Chromium1.CreateBrowser(CEFWindowParent1, '')) then Timer1.Enabled := True;
 
+end;
 
 procedure TfmPrincipal.FormDestroy(Sender: TObject);
 begin
@@ -312,10 +383,7 @@ begin
   end;
 end;
 
-procedure TfmPrincipal.FormShow(Sender: TObject);
-begin
-  Painel_Retratil_AutoWidth(true);
-end;
+
 
 procedure TfmPrincipal.ListaCustomDrawItem(Sender: TCustomListView;
   Item: TListItem; State: TCustomDrawState; var DefaultDraw: Boolean);
@@ -389,6 +457,13 @@ begin
     end;
 
   end;
+end;
+
+procedure TfmPrincipal.Timer1Timer(Sender: TObject);
+begin
+  Timer1.Enabled := False;
+  if not(Chromium1.CreateBrowser(CEFWindowParent1, '')) and not(Chromium1.Initialized) then
+    Timer1.Enabled := True;
 end;
 
 procedure TfmPrincipal.Acao_InicioExecute(Sender: TObject);
@@ -533,17 +608,75 @@ begin
     Font.Size:=Font.Size+1;
 end;
 
-procedure TfmPrincipal.BtnOpenMedia(Sender: TObject);
-var
-  sArquivo:String;
-  sUrlPathMedia:String;
+procedure TfmPrincipal.Chromium1AfterCreated(Sender: TObject;
+  const browser: ICefBrowser);
 begin
-  sArquivo:=TSpeedButton(Sender).Hint;
-  if FileExists(sArquivo) then begin
-    sUrlPathMedia := UTF8Decode(UriParser.FilenameToURI(sArquivo));
-    StatusMsg:='Abrindo '+sUrlPathMedia;
-    OpenUrl(sUrlPathMedia);
-  end;
+    PostMessage(Handle, CEF_AFTERCREATED, 0, 0);
+end;
+
+procedure TfmPrincipal.Chromium1BeforeClose(Sender: TObject;
+  const browser: ICefBrowser);
+begin
+  FCanClose := True;
+  PostMessage(Handle, WM_CLOSE, 0, 0);
+end;
+
+procedure TfmPrincipal.Chromium1BeforePopup(Sender: TObject;
+  const browser: ICefBrowser; const frame: ICefFrame; const targetUrl,
+  targetFrameName: ustring; targetDisposition: TCefWindowOpenDisposition;
+  userGesture: Boolean; const popupFeatures: TCefPopupFeatures;
+  var windowInfo: TCefWindowInfo; var client: ICefClient;
+  var settings: TCefBrowserSettings; var extra_info: ICefDictionaryValue;
+  var noJavascriptAccess: Boolean; var Result: Boolean);
+begin
+  FCanClose := True;
+  PostMessage(Handle, WM_CLOSE, 0, 0);
+end;
+
+procedure TfmPrincipal.Chromium1Close(Sender: TObject;
+  const browser: ICefBrowser; var aAction: TCefCloseBrowserAction);
+begin
+  FCanClose := True;
+  PostMessage(Handle, WM_CLOSE, 0, 0);
+end;
+
+procedure TfmPrincipal.Chromium1KeyEvent(Sender: TObject;
+  const browser: ICefBrowser; const event: PCefKeyEvent;
+  osEvent: TCefEventHandle; out Result: Boolean);
+var
+  TempMsg : TMsg;
+begin
+  Result := False;
+
+  if (event <> nil) and (osEvent <> nil) then
+    case osEvent.Message of
+      WM_KEYUP :
+        begin
+          TempMsg := osEvent^;
+
+          HandleKeyUp(TempMsg, Result);
+        end;
+
+      WM_KEYDOWN :
+        begin
+          TempMsg := osEvent^;
+
+          HandleKeyDown(TempMsg, Result);
+        end;
+    end;
+end;
+
+procedure TfmPrincipal.Chromium1PreKeyEvent(Sender: TObject;
+  const browser: ICefBrowser; const event: PCefKeyEvent;
+  osEvent: TCefEventHandle; out isKeyboardShortcut: Boolean; out Result: Boolean
+  );
+begin
+  Result := False;
+
+  if (event <> nil) and
+     (event.kind in [KEYEVENT_KEYDOWN, KEYEVENT_KEYUP]) and
+     (event.windows_key_code = VK_ESCAPE) then
+    isKeyboardShortcut := True;
 end;
 
 procedure TfmPrincipal.Acao_ClipboardExecute(Sender: TObject);
@@ -923,20 +1056,96 @@ begin
   StatusBar1.Panels[0].Text:=FStatusMsg;
 end;
 
+procedure TfmPrincipal.WMMove(var aMessage: TWMMove);
+begin
+  inherited;
+
+  if (Chromium1 <> nil) then Chromium1.NotifyMoveOrResizeStarted;
+end;
+
+procedure TfmPrincipal.WMMoving(var aMessage: TMessage);
+begin
+  inherited;
+
+  if (Chromium1 <> nil) then Chromium1.NotifyMoveOrResizeStarted;
+end;
+
+procedure TfmPrincipal.WMEnterMenuLoop(var aMessage: TMessage);
+begin
+  inherited;
+
+  if (aMessage.wParam = 0) and (GlobalCEFApp <> nil) then GlobalCEFApp.OsmodalLoop := True;
+end;
+
+procedure TfmPrincipal.WMExitMenuLoop(var aMessage: TMessage);
+begin
+  inherited;
+
+  if (aMessage.wParam = 0) and (GlobalCEFApp <> nil) then GlobalCEFApp.OsmodalLoop := False;
+end;
+
+procedure TfmPrincipal.BrowserCreatedMsg(var aMessage: TMessage);
+begin
+  CEFWindowParent1.UpdateSize;
+end;
+
+procedure TfmPrincipal.BrowserDestroyMsg(var aMessage: TMessage);
+begin
+  CEFWindowParent1.Free;
+end;
+
+procedure TfmPrincipal.HandleKeyUp(const aMsg: TMsg; var aHandled: boolean);
+var
+  TempMessage : TMessage;
+  TempKeyMsg  : TWMKey;
+begin
+  TempMessage.Msg     := aMsg.message;
+  TempMessage.wParam  := aMsg.wParam;
+  TempMessage.lParam  := aMsg.lParam;
+  TempKeyMsg          := TWMKey(TempMessage);
+
+  if (TempKeyMsg.CharCode = VK_ESCAPE) then
+    begin
+      aHandled := True;
+
+      PostMessage(Handle, WM_CLOSE, 0, 0);
+    end;
+
+end;
+
+procedure TfmPrincipal.HandleKeyDown(const aMsg: TMsg; var aHandled: boolean);
+var
+  TempMessage : TMessage;
+  TempKeyMsg  : TWMKey;
+begin
+  TempMessage.Msg     := aMsg.message;
+  TempMessage.wParam  := aMsg.wParam;
+  TempMessage.lParam  := aMsg.lParam;
+  TempKeyMsg          := TWMKey(TempMessage);
+
+  if (TempKeyMsg.CharCode = VK_ESCAPE) then aHandled := True;
+end;
+
 function TfmPrincipal.PlayAsHTML(AArquivo: String):String;
 var
-  sUrlPathIndex:String;
-  sUrlPathVideo:String;
+  sUrlPathToIndex:String;
+  sUrlPathToMedia:String;
   sMimeExt:String;
   sIndexHTML:String;
+  bIsVideo:Boolean;
+  bIsImage:Boolean;
+  bIsPDF:Boolean;
   L:TStringList;
 begin
   Result:='';
+  //if FileExists(AArquivo) then
+  //    Exit;
+
   sIndexHTML:=GetEnvironmentVariable('TEMP')+'\index.htm';
-  //sUrlPathIndex:=FilePathToURL(sIndexHTML);
-  //sUrlPathVideo:=FilePathToURL(AArquivo);
-  sUrlPathIndex := UTF8Decode(UriParser.FilenameToURI(sIndexHTML));
-  sUrlPathVideo := UTF8Decode(UriParser.FilenameToURI(AArquivo));
+  //sUrlPathToIndex:=FilePathToURL(sIndexHTML);
+  //sUrlPathToMedia:=FilePathToURL(AArquivo);
+  sUrlPathToIndex := UriParser.FilenameToURI(sIndexHTML);
+  sUrlPathToMedia := UriParser.FilenameToURI(AArquivo);
   sMimeExt:=ExtractFileExt(AArquivo);
   while LeftStr(sMimeExt,1)='.' do
     sMimeExt:=RightStr(sMimeExt, Length(sMimeExt)-1);
@@ -946,63 +1155,78 @@ begin
     MediaHide;
   end;
 
+  bIsVideo:=IsVIdeo(AArquivo);
+  bIsImage:=IsImage(AArquivo);
+  bIsPDF:=IsPDF(AArquivo);
+
   L:=TStringList.Create;
 
   if Result='' then begin
     try
       L.Add('<html>');
-      L.Add('<head>');
-      L.Add('<meta http-equiv="X-UA-Compatible" content="IE=9" />');
-      L.Add('</head>');
-      L.Add('<style>');
-      L.Add('html');
-      L.Add('{');
-      L.Add(' position:fixed;');
-      L.Add(' overflow:hidden;');
-      L.Add(' -ms-overflow-style: none;');
-      L.Add('    border:0px;');
-      L.Add(' }</style>');
-
-      L.Add('  <body style="background-color:black;margin=0px;padding=0px;">');
       if AArquivo='' then
       begin
+        L.Add('<head>');
+        L.Add('</head>');
+        L.Add('  <body style="background-color:black;margin=0px;padding=0px;">');
         L.Add('<p><h3>Copie o endereço da localização do arquivo para a área de '+
           'clipboard e depois cole (ctrl+v) na janela de seleção de arquivo desejada.</h3></p>');
       end
       else
       begin
-        if FileExists(AArquivo) then
+        if bIsVideo then
         begin
-          L.Add('  <video id=video width=100% autobuffer controls fullscreen="true">');  //controls
-          L.Add('  <source src="'+sUrlPathVideo+'" type="video/'+sMimeExt+'">');
-          L.Add('  <object type="video/mp4" data="media_v/video.mp4"  min-width: 100% min-height: 100%">');
-          L.Add('  </object>');
+          L.Add('<head>');
+          L.Add('</head>');
+          L.Add('<body style="background-color:black;margin=0px;padding=0px;">');
+          L.Add('  <video id=video width="100%" autoplay="true" controls="false" fullscreen="true">');  //controls
+          L.Add('  <source src="'+sUrlPathToMedia+'" type="video/'+sMimeExt+'">');
           L.Add('  Seu navegador padrão não suporta a tag video.');
           L.Add('  </video>');
-        end
-        else
-        begin
-          L.Add('<p><h3>Arquivo não encontrado:</h3></p> ');
-          L.Add('<p>'+AArquivo+'</p> ');
-          L.Add('<p>'+sUrlPathVideo+'</p> ');
+          L.Add('</body>');
         end;
+        if bIsPDF then
+        begin
+          L.Add('<head>');
+          L.Add('</head>');
+          L.Add('<body style="background-color:black;margin=0px;padding=0px;">');
+          L.Add('<embed');
+          L.Add('  src="'+sUrlPathToMedia+'#toolbar=0&navpanes=0&scrollbar=0"');
+          L.Add('  type="application/pdf"');
+          L.Add('  frameBorder="0"');
+          L.Add('  scrolling="auto"');
+          L.Add('  height="100%"');
+          L.Add('  width="100%">');
+          L.Add('</embed>');
+          L.Add('</body>');
+        end;
+
       end;
-      L.Add('  </body>');
+
       L.Add('</html>');
       L.SaveToFile(sIndexHTML);
       if FileExists(sIndexHTML) then begin
-        Paginas.ActivePage:=TabVideo;
-        TabVideo.Caption:=ExtractFileName(AArquivo);
+        Paginas.ActivePage:=TabMedia;
+        TabMedia.Caption:=ExtractFileName(AArquivo);
         //todo: embutir o navegador na Tab usando as dimensões que o video dispuser
-        //WebBrowser1.OleObject.document.body.Scroll := 'no';
-        //WebBrowser1.FullScreen:=true;
-        //WebBrowser1.Navigate(sIndexHTML);
+        StatusMsg:='Carregando o navegador: '+sIndexHTML;
+        //Chromium1.OleObject.document.body.Scroll := 'no';
+        //Chromium1.FullScreen:=true;
+        //Chromium1.Navigate(sIndexHTML);
+        // aguardando a carga do navegador
+        Chromium1.AudioMuted:=false;
+        Chromium1.Offline:=true;
+        Chromium1.DefaultUrl := sIndexHTML;
+        Chromium1.LoadURL(sIndexHTML);
+        //while not (Chromium1.CreateBrowser(CEFWindowParent1, ''))
+        //and (Chromium1.Initialized) do begin
+        //  Sleep(1000);
+        //  application.processMessages(); // avaliar se a aplicação requer despachar outras mesnagens.
+        //end;
+
         Clipboard.AsText:=AArquivo;
         StatusMsg:='Endereço de "'+ExtractFileName(AArquivo)+'" foi copiado para a '+
           'clipboard, use Ctrl+V onde for possível.' ;
-        BtnFileName_Video.Caption:='Abrir '+ExtractFileName(AArquivo);
-        BtnFileName_Video.Hint:=AArquivo;
-        BtnFileName_Video.Visible:=true;
       end;
 
     except
@@ -1054,37 +1278,6 @@ begin
   end;
 end;
 
-function TfmPrincipal.PlayAsPDF(AArquivo: String): String;
-begin
-  Result:='';
-  // todo: exibir um conteúdo PDF, pelas minhas perspectivas
-  //   só mesmo através de um browser
-  if not FileExists(AArquivo) then
-    Result:='Arquivo não existe: '+AArquivo;
-  if Result='' then begin
-    MediaHide;
-    //Result:=StopVideo;
-  end;
-
-  if Result='' then
-  begin
-    try
-      Paginas.ActivePage:=TabPDF;
-      TabPDF.Caption:=ExtractFileName(AArquivo);
-      //todo: embutir o leitor/pdf na Tab usando as dimensões que o video dispuser
-      Clipboard.AsText:=AArquivo;
-      StatusMsg:='Endereço de "'+ExtractFileName(AArquivo)+'" foi copiado para a '+
-        'clipboard, use Ctrl+V onde for possível.' ;
-        BtnFileName_PDF.Caption:='Abrir '+ExtractFileName(AArquivo);
-        BtnFileName_PDF.Hint:=AArquivo;
-        BtnFileName_PDF.Visible:=true;
-      TryResize;
-    except
-    on e:exception do Result:=e.Message;
-    end;
-  end;
-
-end;
 
 procedure TfmPrincipal.SalvarLista(ANomeArquivo:String='');
 var
@@ -1129,8 +1322,6 @@ procedure TfmPrincipal.MediaHide;
 begin
   try
     Figura.Picture:=nil;
-    BtnFileName_Video.Visible:=false;
-    BtnFileName_PDF.Visible:=false;
     StopVideo;
   finally
   end;
@@ -1143,7 +1334,7 @@ begin
   begin
     try
       // todo: se estiver tocando musica/video então deverá pará-lo
-      //WebBrowser1.Stop;
+      Chromium1.StopLoad;
     except
     on e:exception do Result:=e.Message;
     end;
@@ -1233,7 +1424,7 @@ begin
       if bSePDF then
       begin
         try
-          sys_last_error:=PlayAsPDF(AArquivo);
+          sys_last_error:=PlayAsHTML(AArquivo);
         except
         on e:exception do sys_last_error:=e.Message;
         end;

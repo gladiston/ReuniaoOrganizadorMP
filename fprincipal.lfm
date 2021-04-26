@@ -18,10 +18,10 @@ object fmPrincipal: TfmPrincipal
     Height = 296
     Top = 0
     Width = 646
-    ActivePage = TabPDF
+    ActivePage = TabMedia
     Align = alClient
     Images = ImageList1
-    TabIndex = 2
+    TabIndex = 1
     TabOrder = 0
     object TabFigura: TTabSheet
       Caption = 'Figura'
@@ -38,32 +38,18 @@ object fmPrincipal: TfmPrincipal
         Proportional = True
       end
     end
-    object TabVideo: TTabSheet
-      Caption = 'Video'
+    object TabMedia: TTabSheet
+      Caption = 'Media'
       ClientHeight = 268
       ClientWidth = 638
       ImageIndex = 18
-      object BtnFileName_Video: TSpeedButton
+      object CEFWindowParent1: TCEFWindowParent
         Left = 0
-        Height = 22
-        Top = 246
+        Height = 268
+        Top = 0
         Width = 638
-        Align = alBottom
-        OnClick = BtnOpenMedia
-      end
-    end
-    object TabPDF: TTabSheet
-      Caption = 'PDF'
-      ClientHeight = 268
-      ClientWidth = 638
-      ImageIndex = 17
-      object BtnFileName_PDF: TSpeedButton
-        Left = 0
-        Height = 22
-        Top = 246
-        Width = 638
-        Align = alBottom
-        OnClick = BtnOpenMedia
+        Align = alClient
+        TabOrder = 0
       end
     end
   end
@@ -1032,5 +1018,20 @@ object fmPrincipal: TfmPrincipal
     BalloonFlags = bfInfo
     Left = 384
     Top = 80
+  end
+  object Chromium1: TChromium
+    OnPreKeyEvent = Chromium1PreKeyEvent
+    OnKeyEvent = Chromium1KeyEvent
+    OnBeforePopup = Chromium1BeforePopup
+    OnAfterCreated = Chromium1AfterCreated
+    OnBeforeClose = Chromium1BeforeClose
+    OnClose = Chromium1Close
+    Left = 372
+    Top = 156
+  end
+  object Timer1: TTimer
+    OnTimer = Timer1Timer
+    Left = 496
+    Top = 180
   end
 end
