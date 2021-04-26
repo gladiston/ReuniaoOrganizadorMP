@@ -1,2 +1,2 @@
 # ReuniaoOrganizadorMP
-Organizador de reunião multiplataforma
+<p>Organizador de reunião multiplataforma é um programa dedicado a ser um player de figuras, vídeos e PDF minimalista cujo objetivo é mostrar uma sequencia de imagens, videos e PDF quando um reunião estiver em andamento, especialmente virtuais. Por ser minimalista, o operador poderá compartilhar a janela do aplicativo que estará exibindo algo relevante para a reunião. Os arquivos a serem usados numa reunião são gravados antecipadamente numa lista para serem recuperados na ocasião da reunião, assim quem presidi-la poderá preparar-se com antecedencia.</p>
